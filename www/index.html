@@ -718,7 +718,7 @@ function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.im
 let S = null;                                    // persisted data
 const UI = {                                     // ephemeral view state
   view:"dash", month:ymOf(today()), search:"", filterCat:"all",
-  moveFrom:null, importOpen:false, importRows:null, importSign:"auto",
+  moveFrom:null, importOpen:false, importRows:null, importSign:"auto", budImportOpen:false, budRows:null,
   cfRange:6, billForm:false, authMode:"signin", authError:"", authEmail:"", authServer:"", needInvite:false, health:null, pwForm:false, goalForm:false, goalAdd:null, goalEdit:null, askDel:null,
   acctForm:false, askWipe:false
 };
@@ -1014,15 +1014,173 @@ function asNum(v){
   const n = parseFloat(s);
   return isFinite(n) ? (neg ? -n : n) : null;
 }
+/* ═══════════════ moving in from another budgeting app ═══════════════
+   Other apps export the category and account you already chose. The positional
+   importer below throws those away, so read the header row when there is one and
+   keep them; fall back to the heuristic for headerless bank CSVs. */
+const H_ALIASES = {
+  date:     ["date","transaction date","posted date","post date","date posted","completed date"],
+  desc:     ["description","merchant","payee","name","original description","original statement","details"],
+  amount:   ["amount","transaction amount","value"],
+  outflow:  ["outflow","debit","withdrawal","money out","spent"],
+  inflow:   ["inflow","credit","deposit","money in","received"],
+  category: ["category group/category","category","parent category","budget category"],
+  account:  ["account name","account","bank account"],
+  type:     ["transaction type","type"]
+};
+function normHdr(row){ return row.map(x => String(x||"").trim().toLowerCase().replace(/\s+/g," ")); }
+function detectSource(hdr){
+  const h = normHdr(hdr), has = n => h.indexOf(n) >= 0;
+  if(has("outflow") && has("inflow")) return "YNAB";
+  if(has("original description") && has("transaction type")) return "Mint";
+  if(has("original statement") || (has("merchant") && has("category") && has("account"))) return "Monarch";
+  if(has("parent category")) return "Copilot";
+  if(has("category") || has("payee")) return "another budgeting app";
+  return null;
+}
+function mapHeaders(hdr){
+  const h = normHdr(hdr), map = {}, claimed = {};
+  const keys = Object.keys(H_ALIASES);
+  // exact matches win, so "account name" cannot be stolen by the "name" alias
+  keys.forEach(k => H_ALIASES[k].some(a => {
+    const i = h.indexOf(a);
+    if(i >= 0 && !claimed[i]){ map[k] = i; claimed[i] = 1; return true; }
+    return false;
+  }));
+  keys.forEach(k => { if(map[k] == null) H_ALIASES[k].some(a => {
+    const i = h.findIndex((c, j) => !claimed[j] && c.indexOf(a) >= 0);
+    if(i >= 0){ map[k] = i; claimed[i] = 1; return true; }
+    return false;
+  }); });
+  return map;
+}
+/* "Everyday Expenses: Groceries" and "Food/Groceries" both mean Groceries here. */
+function cleanCatName(raw){
+  let v = String(raw||"").trim();
+  const i = Math.max(v.lastIndexOf(":"), v.lastIndexOf("/"));
+  if(i >= 0 && i < v.length - 1) v = v.slice(i + 1).trim();
+  return v.slice(0, 40);
+}
+/* Nothing is created while previewing — these run only on confirm. */
+function ensureCat(rawName, incomeHint){
+  const name = cleanCatName(rawName);
+  if(!name) return null;
+  const found = catByName(name);
+  if(found) return found.id;
+  const c = {id:uid(), name, key:name, group: incomeHint ? "Income" : "Everyday",
+             kind: incomeHint ? "income" : "flex", budget:0};
+  S.cats.push(c);
+  return c.id;
+}
+function ensureAcct(rawName){
+  const name = String(rawName||"").trim().slice(0,40);
+  if(!name) return null;
+  const found = S.accounts.find(a => a.name.toLowerCase() === name.toLowerCase());
+  if(found) return found.id;
+  const a = {id:uid(), name, kind:"Checking", balance:0};
+  S.accounts.push(a);
+  return a.id;
+}
+/* A budget/envelope export: category name plus a monthly amount. */
+function parseBudgetImport(text){
+  const rows = splitRows(text);
+  if(!rows.length) return null;
+  const width = Math.max.apply(null, rows.map(r => r.length));
+  if(width < 2) return null;
+  const hasHeader = rows.length > 1 && rows[0].every(c => asNum(c) === null);
+  const hdr = hasHeader ? normHdr(rows[0]) : null;
+  const body = hasHeader ? rows.slice(1) : rows;
+  if(!body.length) return null;
+
+  let nameCol = 0, amtCol = -1;
+  if(hdr){
+    const ci = hdr.findIndex(c => /categor|envelope|group|name/.test(c));
+    if(ci >= 0) nameCol = ci;
+    const bi = hdr.findIndex(c => /budget|planned|assigned|amount|monthly/.test(c));
+    if(bi >= 0 && bi !== nameCol) amtCol = bi;
+  }
+  if(amtCol < 0) for(let i = width - 1; i >= 0; i--){
+    if(i !== nameCol && body.some(r => asNum(r[i]) !== null)){ amtCol = i; break; }
+  }
+  if(amtCol < 0) return null;
+
+  const out = [], seen = {};
+  body.forEach(r => {
+    const name = cleanCatName(r[nameCol]);
+    const amt = asNum(r[amtCol]);
+    if(!name || amt === null) return;
+    const k = name.toLowerCase();
+    const rec = {name, amount: round2(Math.abs(amt)), existing: !!catByName(name)};
+    // a file with one row per month lands the most recent month last, so last wins
+    if(seen[k] !== undefined) out[seen[k]] = rec;
+    else { seen[k] = out.length; out.push(rec); }
+  });
+  return out.length ? out : null;
+}
+
 function parseImport(text, signMode){
   const rows = splitRows(text);
   if(rows.length < 1) return null;
   const width = Math.max.apply(null, rows.map(r => r.length));
   if(width < 2) return null;
   // drop a header row: one where no cell parses as a date
-  let body = rows;
-  if(rows.length > 1 && !rows[0].some(asDate)) body = rows.slice(1);
+  const hasHeader = rows.length > 1 && !rows[0].some(asDate);
+  let body = hasHeader ? rows.slice(1) : rows;
   if(!body.length) return null;
+
+  // Header path: another app's export, where the category and account are already
+  // chosen and worth keeping. Names are resolved on confirm, not here, so a preview
+  // never creates anything.
+  const map = hasHeader ? mapHeaders(rows[0]) : {};
+  const hasAmt = map.amount != null || map.outflow != null || map.inflow != null;
+  if(hasHeader && map.date != null && hasAmt){
+    const amtCol = map.amount, signed = amtCol != null
+      && body.some(r => (asNum(r[amtCol]) || 0) < 0);
+    const out = [];
+    body.forEach(r => {
+      let amount;
+      if(map.outflow != null || map.inflow != null){
+        const o = map.outflow != null ? (asNum(r[map.outflow]) || 0) : 0;
+        const i = map.inflow  != null ? (asNum(r[map.inflow])  || 0) : 0;
+        if(!o && !i) return;
+        amount = round2(Math.abs(i) - Math.abs(o));
+      }else{
+        const n = asNum(r[amtCol]);
+        if(n === null) return;
+        const ty = map.type != null ? String(r[map.type] || "").toLowerCase() : "";
+        if(/debit|withdraw|purchase|expense/.test(ty))     amount = -Math.abs(n);
+        else if(/credit|deposit|income|refund/.test(ty))   amount =  Math.abs(n);
+        else if(signMode === "spend")                      amount = -Math.abs(n);
+        else if(signMode === "signed")                     amount = n;
+        else                                               amount = signed ? n : -Math.abs(n);
+      }
+      const date = asDate(r[map.date]) || isoOf(today());
+      const merchant = String((map.desc != null && r[map.desc]) || "Imported").trim().slice(0,60) || "Imported";
+      let catRaw = map.category != null ? cleanCatName(r[map.category]) : "";
+      // YNAB parks income in a placeholder that is not a real category
+      if(/^(ready to assign|to be budgeted|inflow|uncategorized|uncategorised)$/i.test(catRaw)) catRaw = "";
+      const acctRaw = map.account != null ? String(r[map.account] || "").trim().slice(0,40) : "";
+      const known = catRaw ? catByName(catRaw) : null;
+      const knownAcct = acctRaw
+        ? S.accounts.find(a => a.name.toLowerCase() === acctRaw.toLowerCase()) : null;
+      out.push({
+        id:uid(), date, merchant, amount:round2(amount),
+        cat: known ? known.id : (catRaw ? null : guessCat(merchant, amount > 0)),
+        catName: known ? null : (catRaw || null),
+        acct: knownAcct ? knownAcct.id : null,
+        acctName: knownAcct ? null : (acctRaw || null)
+      });
+    });
+    if(!out.length) return null;
+    const uniq = a => Array.from(new Set(a.filter(Boolean)));
+    out.meta = {
+      source: detectSource(rows[0]),
+      newCats:  uniq(out.map(t => t.catName)),
+      newAccts: uniq(out.map(t => t.acctName)),
+      withCategory: out.filter(t => t.cat || t.catName).length
+    };
+    return out;
+  }
 
   const score = { date:new Array(width).fill(0), num:new Array(width).fill(0), text:new Array(width).fill(0) };
   body.slice(0,40).forEach(r => {
@@ -1173,6 +1331,28 @@ function viewToday(){
     + '</div></div>';
 }
 
+function budImportHTML(){
+  const rows = UI.budRows;
+  return '<div class="import" style="margin-bottom:18px">'
+    + '<div class="note">Bringing budgets over from another app or a spreadsheet? Paste two columns &mdash; the category name and the monthly amount &mdash; or choose the file. '
+      + 'A YNAB budget export works as is. Categories you do not have yet are created; the rest just get their amount set.</div>'
+    + '<div class="filters">'
+      + '<label class="btn btn-s" style="cursor:pointer">Choose a budget file<input type="file" accept=".csv,.tsv,.txt,text/csv" data-act="budfile" hidden></label>'
+      + '<button class="btn btn-s" data-act="budpreview">Preview</button>'
+      + (rows ? '<button class="btn btn-p btn-s" data-act="budconfirm">Set ' + rows.length + ' budget' + (rows.length===1?"":"s") + '</button>' : "")
+    + '</div>'
+    + '<textarea id="budcsv" placeholder="Groceries, 620&#10;Dining out, 280&#10;Rent, 2150" aria-label="Paste budgets"></textarea>'
+    + (rows ? '<div class="banner"><b>' + rows.filter(r => !r.existing).length + ' new, '
+        + rows.filter(r => r.existing).length + ' updated.</b> Monthly total '
+        + usd(rows.reduce((a,r) => a + r.amount, 0)) + '.</div>'
+      + '<div class="panel scroll-x"><table class="prev"><thead><tr><th>Category</th><th>Status</th><th style="text-align:right">Monthly</th></tr></thead><tbody>'
+      + rows.slice(0,10).map(r => '<tr><td>' + esc(r.name) + '</td><td>' + (r.existing ? "update" : "new")
+          + '</td><td class="a">' + usd(r.amount) + '</td></tr>').join("")
+      + '</tbody></table></div>'
+      + (rows.length > 10 ? '<div class="note">and ' + (rows.length - 10) + ' more.</div>' : "") : "")
+    + '</div>';
+}
+
 function viewBudget(){
   const ym = UI.month, s = summary(ym);
   const groups = GROUP_ORDER.filter(g => g !== "Income").map(g => {
@@ -1227,8 +1407,10 @@ function viewBudget(){
         + '<div class="tools">'
           + '<button class="btn btn-s'+(UI.catForm?"":" btn-p")+'" data-act="cattoggle">'+(UI.catForm?"Cancel":"Add a category")+'</button>'
           + '<button class="btn btn-s" data-act="autobudget">Set from my 3-month average</button>'
+          + '<button class="btn btn-s" data-act="budimport">'+(UI.budImportOpen?"Close import":"Import budgets")+'</button>'
           + '<button class="btn btn-s" data-act="savecsv">Save as CSV</button>'
         + '</div></div>'
+      + (UI.budImportOpen ? budImportHTML() : "")
       + (UI.catForm ? catFormHTML() : "")
       + '<div class="note" style="margin-bottom:16px">Budgeted <b>'+usd(totalBud)+'</b> across '
         + (S.cats.filter(c=>isSpendCat(c)).length)+' envelopes · spent <b>'+usd(s.allSpent)+'</b> so far · '
@@ -1264,7 +1446,13 @@ function viewTxns(){
       + '<div class="sec-head"><h2>'+esc(ymLabel(ym))+'</h2>'
         + '<div class="tools"><button class="btn btn-s" data-act="savecsv">Save as CSV</button><button class="btn btn-s" data-act="importtoggle">'+(UI.importOpen?"Close import":"Paste from your bank")+'</button></div></div>'
       + (UI.importOpen ? '<div class="import" style="margin-bottom:18px">'
-          + '<div class="note">Pick a file your bank lets you download (CSV, OFX, QFX or QBO), or paste rows from a CSV. Columns are detected for you, and rows you already have are skipped.</div>'
+          + '<div class="note">Pick a file your bank lets you download (CSV, OFX, QFX or QBO), or paste rows from a CSV. Moving from another app? Export your transactions there and drop the file in &mdash; your categories and accounts come across with them. Columns are detected for you, and rows you already have are skipped.</div>'
+      + (preview && preview.meta ? '<div class="banner"><b>'
+          + esc(preview.meta.source ? 'Looks like a ' + preview.meta.source + ' export.' : 'Read the column headings.') + '</b> '
+          + preview.meta.withCategory + ' of ' + preview.length + ' rows keep the category you already gave them'
+          + (preview.meta.newCats.length ? ', adding ' + preview.meta.newCats.length + ' new categor' + (preview.meta.newCats.length===1?'y':'ies') : '')
+          + (preview.meta.newAccts.length ? ' and ' + preview.meta.newAccts.length + ' new account' + (preview.meta.newAccts.length===1?'':'s') : '')
+          + '.</div>' : '')
           + '<div class="filters">'
             + '<label class="btn btn-s" style="cursor:pointer">Choose a bank file<input type="file" id="imp-file" accept=".csv,.ofx,.qfx,.qbo,.txt,text/csv" data-act="importfile" hidden></label>'
             + '<select class="sel" id="imp-acct" data-act="importacct" aria-label="Account to import into">'
@@ -1282,7 +1470,7 @@ function viewTxns(){
           + '</div>'
           + (preview ? '<div class="panel scroll-x"><table class="prev"><thead><tr><th>Date</th><th>Description</th><th>Category</th><th style="text-align:right">Amount</th></tr></thead><tbody>'
               + preview.slice(0,8).map(t => '<tr><td>'+esc(shortDate(t.date))+'</td><td>'+esc(t.merchant)+'</td><td>'
-                  + esc((catById(t.cat)||{}).name||"—")+'</td><td class="a">'+usd(t.amount,true)+'</td></tr>').join("")
+                  + esc((catById(t.cat)||{}).name || t.catName || "—")+'</td><td class="a">'+usd(t.amount,true)+'</td></tr>').join("")
               + '</tbody></table></div>'
               + (preview.length > 8 ? '<div class="note">and '+(preview.length-8)+' more.</div>' : "") : "")
         + '</div>' : "")
@@ -2836,6 +3024,27 @@ document.addEventListener("click", e => {
     toast(changed ? "Set " + changed + " envelopes from your 3-month average" : "Your budgets already match your averages");
     return;
   }
+  if(act === "budimport"){ UI.budImportOpen = !UI.budImportOpen; UI.budRows = null; render(); return; }
+  if(act === "budpreview"){
+    const rows = parseBudgetImport(($("#budcsv") || {}).value || "");
+    if(!rows){ toast("Could not read that \u2014 each line needs a category name and an amount."); return; }
+    UI.budRows = rows; render(); return;
+  }
+  if(act === "budconfirm"){
+    const rows = UI.budRows || [];
+    let made = 0, updated = 0;
+    rows.forEach(r => {
+      let c = catByName(r.name);
+      if(!c){ ensureCat(r.name, false); c = catByName(r.name); made++; }
+      else updated++;
+      if(c) c.budget = Math.max(0, round2(r.amount));
+    });
+    UI.budRows = null; UI.budImportOpen = false; S.__touched = true; save();
+    toast("Set " + rows.length + " budget" + (rows.length===1?"":"s")
+      + (made ? " \u00b7 " + made + " new categor" + (made===1?"y":"ies") : "")
+      + (updated ? " \u00b7 " + updated + " updated" : ""));
+    return;
+  }
   if(act === "importtoggle"){ UI.importOpen = !UI.importOpen; UI.importRows = null; render(); return; }
   if(act === "importpreview"){
     const txt = ($("#csv") || {}).value || "";
@@ -2845,12 +3054,32 @@ document.addEventListener("click", e => {
   }
   if(act === "importconfirm"){
     const have = new Set(S.txns.map(t => t.id)), keys = new Set(S.txns.map(txnKey));
-    const acct = S.accounts.some(a => a.id === UI.importAcct) ? UI.importAcct : (S.accounts[0] || {}).id;
+    const fallback = S.accounts.some(a => a.id === UI.importAcct) ? UI.importAcct : (S.accounts[0] || {}).id;
     const rows = (UI.importRows || []).filter(t => !have.has(t.id) && !keys.has(txnKey(t)));
     const skipped = (UI.importRows || []).length - rows.length;
-    rows.forEach(t => { t.acct = acct; addTxn(t); });
+    // Categories and accounts named in the file are created now, on confirm.
+    let madeCats = 0, madeAccts = 0;
+    rows.forEach(t => {
+      if(!t.cat && t.catName){
+        if(!catByName(cleanCatName(t.catName))) madeCats++;
+        t.cat = ensureCat(t.catName, t.amount > 0);
+      }
+      if(!t.cat) t.cat = guessCat(t.merchant, t.amount > 0);
+      if(!t.acct && t.acctName){
+        if(!S.accounts.some(a => a.name.toLowerCase() === t.acctName.trim().toLowerCase())) madeAccts++;
+        t.acct = ensureAcct(t.acctName);
+      }
+      if(!t.acct) t.acct = fallback;   // only rows the file did not place
+      delete t.catName; delete t.acctName;
+      addTxn(t);
+    });
     UI.importRows = null; UI.importOpen = false; save();
-    toast("Imported " + rows.length + " transaction" + (rows.length===1?"":"s") + (skipped ? ", skipped " + skipped + " you already had" : ""));
+    const extra = [];
+    if(madeCats)  extra.push(madeCats + " new categor" + (madeCats===1?"y":"ies"));
+    if(madeAccts) extra.push(madeAccts + " new account" + (madeAccts===1?"":"s"));
+    if(skipped)   extra.push("skipped " + skipped + " you already had");
+    toast("Imported " + rows.length + " transaction" + (rows.length===1?"":"s")
+      + (extra.length ? " · " + extra.join(" · ") : ""));
     return;
   }
   if(act === "showuncat"){
@@ -3004,6 +3233,20 @@ document.addEventListener("change", e => {
   }
   if(act === "filtercat"){ UI.filterCat = el.value; render(); return; }
   if(act === "importacct"){ UI.importAcct = el.value; return; }
+  if(act === "budfile"){
+    const file = el.files && el.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rows = parseBudgetImport(String(reader.result || ""));
+      if(!rows){ toast("Could not find budgets in " + file.name + "."); return; }
+      UI.budRows = rows; UI.budImportOpen = true; render();
+    };
+    reader.onerror = () => toast("Could not read " + file.name + ".");
+    reader.readAsText(file);
+    el.value = "";
+    return;
+  }
   if(act === "importfile" || act === "restorefile"){
     const file = el.files && el.files[0];
     if(!file) return;

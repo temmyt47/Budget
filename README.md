@@ -141,6 +141,18 @@ Optional settings:
 | DELETE | `/api/me` | Deletes the account, every bank connection and all server data |
 | POST | `/api/plaid/webhook` | Plaid webhooks |
 
+## Moving in from another app
+
+You do not have to start from an empty book. Two importers cover the two things people bring with them.
+
+**Transactions** — Transactions → *Paste from your bank*. Drop in a CSV (or OFX/QFX/QBO) exported from your old app and it reads the column headings, so the **category and account you already chose come across too**. Exports from YNAB, Mint, Monarch and Copilot are recognised by name; anything else with a date, a description and an amount still works. It handles YNAB's Outflow/Inflow pair and Mint's debit/credit column, creates categories and accounts the file mentions but you do not have, and skips rows you already imported.
+
+Headerless bank CSVs behave as before: columns are guessed by shape and categories assigned by merchant.
+
+**Budgets** — Budget → *Import budgets*. Paste two columns, the category name and the monthly amount, or choose a file. A YNAB budget export works as is; where it has one row per month, the most recent wins. Categories you already have get their amount set, the rest are created.
+
+Group prefixes are stripped, so YNAB's `Everyday Expenses: Groceries` becomes `Groceries`, and placeholders like `Ready to Assign` are ignored rather than becoming categories.
+
 ## Light and dark
 
 The app follows your device by default. The button at the bottom of the sidebar — on a phone, the sun/moon button in the header — cycles **system → light → dark → system**, and the choice is remembered on that device.
