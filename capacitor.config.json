@@ -1,0 +1,11 @@
+{
+  "appId": "com.example.safetospend",
+  "appName": "Safe to Spend",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "never"
+  },
+  "android": {
+    "backgroundColor": "#0E1519"
+  }
+}

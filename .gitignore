@@ -1,0 +1,27 @@
+# installed packages (npm install brings them back)
+node_modules/
+server/node_modules/
+
+# local data and secrets: never commit these
+server/data/
+server/.env
+.env
+*.db
+*.db-wal
+*.db-shm
+
+# native build output
+ios/App/Pods/
+ios/App/build/
+ios/DerivedData/
+ios/App/App.xcodeproj/xcuserdata/
+ios/App/App.xcworkspace/xcuserdata/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.keystore
+*.jks
+
+.DS_Store

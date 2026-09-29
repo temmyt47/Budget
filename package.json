@@ -1,0 +1,23 @@
+{
+  "name": "safe-to-spend",
+  "version": "1.0.0",
+  "description": "Safe to Spend: personal budgeting app (web, iOS, Android)",
+  "scripts": {
+    "setup:native": "node scripts/setup-native.mjs",
+    "sync": "npx cap sync",
+    "server": "npm --prefix server start",
+    "demo": "npm --prefix server run demo"
+  },
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5"
+  },
+  "private": true
+}

@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Safe to Spend Owner</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#F4F6F7; --surface:#FFFFFF; --surface-2:#EDF1F3; --surface-3:#E3EAED;
+  --line:#D8E1E5; --line-soft:#E6ECEF; --line-strong:#BCCAD1;
+  --ink:#0F1E25; --ink-2:#3C525C; --muted:#6D828C;
+  --accent:#0B5D75; --accent-2:#0080A3; --on-accent:#FFFFFF; --accent-soft:#DFEDF2;
+  --good:#3F7A55; --good-soft:#E3EFE7; --warn:#9C6F12; --warn-soft:#F5EDDB; --bad:#B03A26; --bad-soft:#F8E5E1;
+  --s1:#0080A3; --s2:#A8620F; --grid:#E2E9EC;
+  --shadow:0 1px 2px rgba(15,30,37,.05), 0 10px 28px -16px rgba(15,30,37,.22);
+  --r:10px; --r-sm:7px;
+  --ff-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --ff-body:"Public Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --ff-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1519; --surface:#151E23; --surface-2:#1C282E; --surface-3:#233139;
+    --line:#26363E; --line-soft:#1E2B32; --line-strong:#3A4E57;
+    --ink:#E9F1F4; --ink-2:#B6C7CF; --muted:#889EA8;
+    --accent:#4FB3D0; --accent-2:#1795B8; --on-accent:#05202A; --accent-soft:#16303A;
+    --good:#63A87C; --good-soft:#162B20; --warn:#D6A03F; --warn-soft:#2D2416; --bad:#E2705A; --bad-soft:#331C18;
+    --s1:#1795B8; --s2:#BC7C24; --grid:#1F2D34;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 30px -18px rgba(0,0,0,.8);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1519; --surface:#151E23; --surface-2:#1C282E; --surface-3:#233139;
+  --line:#26363E; --line-soft:#1E2B32; --line-strong:#3A4E57;
+  --ink:#E9F1F4; --ink-2:#B6C7CF; --muted:#889EA8;
+  --accent:#4FB3D0; --accent-2:#1795B8; --on-accent:#05202A; --accent-soft:#16303A;
+  --good:#63A87C; --good-soft:#162B20; --warn:#D6A03F; --warn-soft:#2D2416; --bad:#E2705A; --bad-soft:#331C18;
+  --s1:#1795B8; --s2:#BC7C24; --grid:#1F2D34;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 30px -18px rgba(0,0,0,.8);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--ff-body);-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--ff-display);margin:0;letter-spacing:-.014em;text-wrap:balance}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:none;padding:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+[hidden]{display:none!important}
+.eyebrow{font-family:var(--ff-mono);font-size:10.5px;font-weight:500;letter-spacing:.13em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--ff-mono);font-variant-numeric:tabular-nums}
+.note{font-size:12.5px;color:var(--muted)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 13px;border-radius:var(--r-sm);border:1px solid var(--line-strong);background:var(--surface);font-weight:600;font-size:13px;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn-p{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn-p:hover{background:var(--accent-2);border-color:var(--accent-2)}
+.btn-s{padding:5px 10px;font-size:12px;font-weight:500}
+.btn-d:hover{color:var(--bad);border-color:var(--bad)}
+.btn[disabled]{opacity:.5;cursor:default}
+input.in,select.in{padding:8px 10px;border:1px solid var(--line-strong);border-radius:var(--r-sm);background:var(--surface);font-size:13px;min-width:0}
+input.in:focus,select.in:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-soft)}
+
+/* shell */
+.top{
+  position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--surface);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px max(16px,calc((100vw - 1180px)/2));
+}
+.brand{display:flex;align-items:center;gap:9px}
+.mark{width:26px;height:26px;border-radius:7px;background:var(--accent);display:grid;place-items:center;font:800 14px var(--ff-display);color:var(--on-accent)}
+.brand b{font:700 15px var(--ff-display);letter-spacing:-.02em}
+.tag{font-family:var(--ff-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:20px;background:var(--accent-soft);color:var(--accent);font-weight:600}
+.top .tools{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)}
+main{max-width:1180px;margin:0 auto;padding:22px 16px 60px;display:grid;gap:22px}
+.sec-head{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.sec-head h2{font-size:15px;font-weight:700}
+.sec-head .tools{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;min-width:0}
+.card h2{font-size:14px;font-weight:700}
+.banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;border-radius:var(--r);border:1px solid var(--line);font-size:12.5px;color:var(--ink-2);background:var(--accent-soft)}
+.banner.warn{background:var(--warn-soft)} .banner.bad{background:var(--bad-soft)}
+.banner b{color:var(--ink)}
+.alerts{display:grid;gap:8px}
+
+/* kpis */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:13px 15px;display:grid;gap:3px;min-width:0}
+.kpi .v{font:800 26px/1.1 var(--ff-display);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.kpi .s{font-size:11.5px;color:var(--muted)}
+.kpi.hero{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.kpi.hero .eyebrow,.kpi.hero .s{color:var(--on-accent);opacity:.8}
+
+/* charts */
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.chart-h{display:flex;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.chart-h .big{margin-left:auto;font:700 17px var(--ff-display);font-variant-numeric:tabular-nums}
+.chartbox{position:relative}
+.chartbox svg{display:block;width:100%;height:auto;overflow:visible}
+.hv{fill:transparent;cursor:crosshair}
+.xh{stroke:var(--ink-2);stroke-width:1;opacity:0;pointer-events:none}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r-sm);box-shadow:var(--shadow);padding:7px 10px;font-size:12px;z-index:30;min-width:110px;opacity:0;transition:opacity .12s}
+.tip.on{opacity:1}
+.tip b{display:block;font-family:var(--ff-display);font-size:12px;margin-bottom:3px}
+.tip .r{display:flex;justify-content:space-between;gap:14px;font-family:var(--ff-mono);font-size:11.5px}
+.hbars{display:grid;gap:9px}
+.hbar{display:grid;grid-template-columns:110px minmax(0,1fr) 40px;gap:10px;align-items:center;font-size:12.5px}
+.hbar .t{height:12px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+.hbar .f{height:12px;border-radius:4px;background:var(--s1)}
+.hbar .v{font-family:var(--ff-mono);font-size:12px;text-align:right}
+.plans{width:100%;border-collapse:collapse;margin-top:16px;font-size:12.5px}
+.plans th,.plans td{padding:6px 4px;border-top:1px solid var(--line-soft);text-align:left}
+.plans th{color:var(--muted);font-weight:500;font-size:11.5px}
+.plans td.n{text-align:right;font-family:var(--ff-mono)}
+
+/* customers */
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filters .in[type=search]{flex:1;min-width:180px}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
+table.cust{width:100%;border-collapse:collapse;font-size:13px;min-width:860px}
+.cust th{position:sticky;top:0;background:var(--surface-2);text-align:left;font-weight:500;color:var(--muted);font-size:11.5px;padding:8px 12px;border-bottom:1px solid var(--line)}
+.cust td{padding:10px 12px;border-top:1px solid var(--line-soft);vertical-align:middle}
+.cust tr.row:hover td{background:var(--surface-2)}
+.cust td.n{text-align:right;font-family:var(--ff-mono);font-variant-numeric:tabular-nums}
+.cust th.n{text-align:right}
+.who b{display:block;font-weight:600;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.who span{font-size:11.5px;color:var(--muted)}
+.pill{font-family:var(--ff-mono);font-size:10.5px;font-weight:500;letter-spacing:.03em;padding:2px 8px;border-radius:20px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.pill i{width:5px;height:5px;border-radius:50%;background:currentColor}
+.pill.good{background:var(--good-soft);color:var(--good)} .pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.bad{background:var(--bad-soft);color:var(--bad)} .pill.info{background:var(--surface-2);color:var(--ink-2)}
+.pill.acc{background:var(--accent-soft);color:var(--accent)}
+tr.detail td{background:var(--surface-2);padding:14px 16px}
+.acts{display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start}
+.act{display:grid;gap:6px;min-width:0}
+.act .row2{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.secret{font-family:var(--ff-mono);font-size:14px;padding:6px 10px;border-radius:6px;background:var(--surface);border:1px dashed var(--line-strong);user-select:all}
+.confirm{color:var(--bad);font-size:12.5px;font-weight:500;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+
+/* events */
+.events{display:grid}
+.ev{display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:12px;padding:8px 0;border-top:1px solid var(--line-soft);font-size:12.5px;align-items:baseline}
+.ev:first-child{border-top:none}
+.ev .when{font-family:var(--ff-mono);font-size:11.5px;color:var(--muted)}
+.ev .what b{font-weight:600}
+.ev .what span{color:var(--muted)}
+.sys{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;font-size:12.5px;margin:0}
+.sys dt{color:var(--muted)} .sys dd{margin:0;font-family:var(--ff-mono);font-size:12px}
+
+/* sign-in */
+.gate{min-height:100vh;display:grid;place-items:center;padding:24px 16px}
+.gate form{width:min(100%,380px);display:grid;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:26px 24px;box-shadow:var(--shadow)}
+.gate h1{font-size:22px}
+.gate label{display:grid;gap:5px;font-size:12px;color:var(--muted);font-weight:500}
+.err{color:var(--bad);font-size:12.5px;min-height:1em}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,14px);z-index:60;background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:22px;font-size:13px;font-weight:500;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.skeleton{color:var(--muted);padding:40px 0;text-align:center}
+
+@media (max-width:960px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr))} .grid2{grid-template-columns:minmax(0,1fr)} }
+@media (max-width:520px){ .kpi .v{font-size:22px} .ev{grid-template-columns:minmax(0,1fr) auto} .ev .when{grid-column:1/-1} .hbar{grid-template-columns:90px minmax(0,1fr) 34px} }
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+
+<div class="gate" id="gate" hidden>
+  <form id="login">
+    <div class="brand"><div class="mark">S</div><b>Safe to Spend</b><span class="tag">Owner</span></div>
+    <h1>Sign in to the owner dashboard</h1>
+    <label>Email<input class="in" id="lg-email" type="email" autocomplete="username" required></label>
+    <label>Password<input class="in" id="lg-pass" type="password" autocomplete="current-password" required></label>
+    <div class="err" id="lg-err" role="alert"></div>
+    <button class="btn btn-p" type="submit" style="justify-content:center">Sign in</button>
+    <div class="note">Use an account whose email is listed in <span class="mono">OWNER_EMAILS</span> on the server.</div>
+  </form>
+</div>
+
+<div id="app" hidden>
+  <header class="top">
+    <div class="brand"><div class="mark">S</div><b>Safe to Spend</b><span class="tag">Owner</span></div>
+    <div class="tools">
+      <label class="chk"><input type="checkbox" id="test"> Include test purchases</label>
+      <button class="btn btn-s" id="refresh">Refresh</button>
+      <button class="btn btn-s" id="theme">Theme</button>
+      <button class="btn btn-s" id="logout">Sign out</button>
+    </div>
+  </header>
+  <main>
+    <div class="alerts" id="alerts"></div>
+    <section class="kpis" id="kpis"><div class="skeleton">Loading…</div></section>
+    <section class="grid2" id="charts"></section>
+    <section>
+      <div class="sec-head"><h2>Customers</h2><div class="tools"><span class="note" id="ccount"></span></div></div>
+      <div class="filters" style="margin-bottom:12px">
+        <input class="in" type="search" id="csearch" placeholder="Search by email" aria-label="Search customers">
+        <select class="in" id="cstatus" aria-label="Filter customers">
+          <option value="all">Everyone</option>
+          <option value="paying">Paying</option>
+          <option value="trial">On trial</option>
+          <option value="comp">Free access</option>
+          <option value="inactive">No access</option>
+          <option value="problems">Needs attention</option>
+        </select>
+      </div>
+      <div class="tablewrap"><table class="cust">
+        <thead><tr><th>Customer</th><th>Access</th><th>Plan</th><th>Renews or ends</th><th class="n">Paid to date</th><th class="n">Banks</th><th>Last seen</th><th></th></tr></thead>
+        <tbody id="crows"></tbody>
+      </table></div>
+    </section>
+    <section class="grid2">
+      <div class="card"><div class="sec-head"><h2>Billing activity</h2><div class="tools"><span class="note">from Lemon Squeezy</span></div></div><div class="events" id="events"></div></div>
+      <div class="card"><div class="sec-head"><h2>System</h2></div><dl class="sys" id="system"></dl></div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+"use strict";
+const TOKEN_KEY = "sts-owner-token", TEST_KEY = "sts-owner-test";
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clamp = (n,a,b) => Math.max(a, Math.min(b, n));
+const f1 = n => Math.round(n*10)/10;
+const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+let token = null, open = null, askDelete = null, secrets = {}, customers = [];
+try{ token = localStorage.getItem(TOKEN_KEY); }catch(e){}
+
+function usd(n, cents){
+  const v = Math.abs(n || 0), s = v.toLocaleString("en-US", {minimumFractionDigits:cents?2:0, maximumFractionDigits:cents?2:0});
+  return (n < 0 ? "−$" : "$") + s;
+}
+function dateShort(iso){ if(!iso) return "—"; const d = new Date(iso); if(isNaN(d)) return "—"; if(d.getUTCFullYear() > 9000) return "Forever"; return MON[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear(); }
+function ago(iso){
+  if(!iso) return "Never";
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if(m < 2) return "Just now"; if(m < 60) return m + " min ago"; if(m < 1440) return Math.round(m/60) + " h ago";
+  const d = Math.round(m/1440); return d < 45 ? d + " days ago" : dateShort(iso);
+}
+function toast(msg){ const t = $("#toast"); t.textContent = msg; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 2400); }
+const testOn = () => $("#test").checked;
+
+async function api(path, opts){
+  opts = opts || {};
+  const r = await fetch(path, {method:opts.method || "GET", headers:Object.assign({"Content-Type":"application/json"}, token ? {Authorization:"Bearer " + token} : {}),
+    body:opts.body ? JSON.stringify(opts.body) : undefined});
+  let j = null; try{ j = await r.json(); }catch(e){}
+  if(r.status === 401){ signOut(true); throw new Error("Signed out"); }
+  if(!r.ok) throw new Error((j && j.error) || ("Error " + r.status));
+  return j;
+}
+function signOut(silent){
+  if(token && !silent) fetch("/api/auth/logout", {method:"POST", headers:{Authorization:"Bearer " + token}}).catch(()=>{});
+  token = null; try{ localStorage.removeItem(TOKEN_KEY); }catch(e){}
+  $("#app").hidden = true; $("#gate").hidden = false;
+}
+
+/* ── charts ── */
+const TIPS = {};
+const AX = 'font-size="10.5" font-family="IBM Plex Mono, monospace" fill="var(--muted)"';
+function niceTop(max){ if(!(max > 0)) return 10; const step = Math.pow(10, Math.floor(Math.log10(max))) / 2; return Math.ceil(max / step) * step; }
+function axisVal(v, money){ if(!money) return String(Math.round(v)); return v >= 1000 ? "$" + (Math.round(v/100)/10) + "k" : "$" + Math.round(v); }
+function grid(y, L, W, R, label){ return '<line x1="'+L+'" x2="'+(W-R)+'" y1="'+f1(y)+'" y2="'+f1(y)+'" stroke="var(--grid)"/>' + '<text x="'+(L-8)+'" y="'+f1(y+4)+'" text-anchor="end" '+AX+'>'+label+'</text>'; }
+function barUp(x, y, w, h, r){
+  if(h <= 0) return ""; r = Math.min(r, w/2, h);
+  return "M"+f1(x)+","+f1(y+h)+"V"+f1(y+r)+"Q"+f1(x)+","+f1(y)+" "+f1(x+r)+","+f1(y)+"H"+f1(x+w-r)+"Q"+f1(x+w)+","+f1(y)+" "+f1(x+w)+","+f1(y+r)+"V"+f1(y+h)+"Z";
+}
+function monthLabel(key){ return MON[parseInt(key.slice(5,7),10)-1]; }
+function lineChart(id, pts, money, label){
+  const W = 560, H = 200, L = 50, R = 12, T = 12, B = 26, iw = W-L-R, ih = H-T-B, n = pts.length;
+  const top = niceTop(Math.max.apply(null, pts.map(p => p.value)));
+  const x = i => L + (n > 1 ? i/(n-1) : .5)*iw, y = v => T + ih - v/top*ih, step = iw/Math.max(1,n-1);
+  const line = "M" + pts.map((p,i) => f1(x(i))+","+f1(y(p.value))).join("L");
+  let s = '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(label)+'">'
+    + grid(y(0), L, W, R, axisVal(0, money)) + grid(y(top/2), L, W, R, axisVal(top/2, money)) + grid(y(top), L, W, R, axisVal(top, money))
+    + '<path d="'+line+'L'+f1(x(n-1))+','+f1(y(0))+'L'+f1(x(0))+','+f1(y(0))+'Z" fill="var(--s1)" fill-opacity=".12"/>'
+    + '<path d="'+line+'" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+    + '<circle cx="'+f1(x(n-1))+'" cy="'+f1(y(pts[n-1].value))+'" r="4.5" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>'
+    + '<line class="xh" x1="0" x2="0" y1="'+T+'" y2="'+(T+ih)+'"/>';
+  pts.forEach((p,i) => {
+    if(i % 2 === (n-1) % 2) s += '<text x="'+f1(x(i))+'" y="'+(H-7)+'" text-anchor="middle" '+AX+'>'+monthLabel(p.month)+'</text>';
+    s += '<rect class="hv" data-i="'+i+'" data-x="'+f1(x(i))+'" x="'+f1(x(i)-step/2)+'" y="0" width="'+f1(step)+'" height="'+H+'"/>';
+  });
+  TIPS[id] = i => '<b>'+monthLabel(pts[i].month)+' '+pts[i].month.slice(0,4)+'</b><div class="r"><span>'+esc(label)+'</span><span>'+usd(pts[i].value, true)+'</span></div>';
+  return '<div class="chartbox" data-tip="'+id+'">'+s+'</svg><div class="tip"></div></div>';
+}
+function barChart(id, pts, money, label, labelFn, tipTitle){
+  const W = 560, H = 200, L = 50, R = 8, T = 12, B = 26, iw = W-L-R, ih = H-T-B, n = pts.length;
+  const top = niceTop(Math.max.apply(null, pts.map(p => p.value)));
+  const y = v => T + ih - v/top*ih, gw = iw/n, bw = Math.min(30, gw*.56);
+  let s = '<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(label)+'">'
+    + grid(y(0), L, W, R, axisVal(0, money)) + grid(y(top/2), L, W, R, axisVal(top/2, money)) + grid(y(top), L, W, R, axisVal(top, money));
+  pts.forEach((p,i) => {
+    const x = L + gw*i + (gw-bw)/2, h = y(0) - y(p.value);
+    s += '<path d="'+barUp(x, y(p.value), bw, h, 4)+'" fill="var(--s1)"/>';
+    if(i % 2 === (n-1) % 2) s += '<text x="'+f1(L+gw*i+gw/2)+'" y="'+(H-7)+'" text-anchor="middle" '+AX+'>'+esc(labelFn(p))+'</text>';
+    s += '<rect class="hv" data-i="'+i+'" x="'+f1(L+gw*i)+'" y="0" width="'+f1(gw)+'" height="'+H+'"/>';
+  });
+  TIPS[id] = i => '<b>'+esc(tipTitle(pts[i]))+'</b><div class="r"><span>'+esc(label)+'</span><span>'+(money ? usd(pts[i].value, true) : pts[i].value)+'</span></div>';
+  return '<div class="chartbox" data-tip="'+id+'">'+s+'</svg><div class="tip"></div></div>';
+}
+function wireCharts(){
+  document.querySelectorAll(".chartbox[data-tip]").forEach(box => {
+    const fn = TIPS[box.dataset.tip], tip = box.querySelector(".tip"), xh = box.querySelector(".xh");
+    const hide = () => { tip.classList.remove("on"); if(xh) xh.style.opacity = 0; };
+    box.addEventListener("pointermove", e => {
+      const r = e.target.closest && e.target.closest(".hv");
+      if(!r || !fn){ hide(); return; }
+      tip.innerHTML = fn(+r.dataset.i);
+      if(xh && r.dataset.x){ xh.setAttribute("x1", r.dataset.x); xh.setAttribute("x2", r.dataset.x); xh.style.opacity = .55; }
+      const b = box.getBoundingClientRect();
+      tip.classList.add("on");
+      let left = e.clientX - b.left + 14;
+      if(left + tip.offsetWidth > b.width) left = e.clientX - b.left - tip.offsetWidth - 14;
+      tip.style.left = clamp(left, 0, Math.max(0, b.width - tip.offsetWidth)) + "px";
+      tip.style.top = clamp(e.clientY - b.top - tip.offsetHeight - 10, -10, b.height) + "px";
+    });
+    box.addEventListener("pointerleave", hide);
+  });
+}
+
+/* ── summary ── */
+const STATUS_NAMES = {active:"Active", on_trial:"Card trial", free_trial:"Free trial", past_due:"Past due", unpaid:"Unpaid", paused:"Paused", cancelled:"Cancelled", expired:"Expired"};
+function renderSummary(d){
+  const k = d.kpis, sys = d.system, alerts = [];
+  if(!sys.billing) alerts.push(['warn', '<b>Billing is not set up.</b> Everyone can use the app for free until you add LEMONSQUEEZY_WEBHOOK_SECRET and LEMONSQUEEZY_PLANS on the server.']);
+  else if(!sys.lastWebhook) alerts.push(['', '<b>No Lemon Squeezy events yet.</b> In Lemon Squeezy, go to Settings → Webhooks, point a webhook at <span class="mono">/api/billing/webhook</span>, and send a test purchase.']);
+  if(k.failing) alerts.push(['bad', '<b>' + k.failing + ' subscription' + (k.failing===1?' has':'s have') + ' a failed payment.</b> Lemon Squeezy retries the card and emails the customer.']);
+  if(k.badItems) alerts.push(['warn', '<b>' + k.badItems + ' bank connection' + (k.badItems===1?' needs':'s need') + ' the customer to sign in again.</b>']);
+  if(k.hiddenTest && !testOn()) alerts.push(['', k.hiddenTest + ' test-mode subscription' + (k.hiddenTest===1?' is':'s are') + ' hidden. Tick “Include test purchases” to count them.']);
+  if(k.unpriced) alerts.push(['warn', k.unpriced + ' paying subscription' + (k.unpriced===1?' uses a variant that is':'s use variants that are') + ' not in LEMONSQUEEZY_PLANS, so MRR leaves them out.']);
+  $("#alerts").innerHTML = alerts.map(a => '<div class="banner ' + a[0] + '">' + a[1] + '</div>').join("");
+
+  const tiles = [
+    ['hero', 'Monthly recurring revenue', usd(k.mrr, k.mrr < 1000), usd(k.arr) + ' a year at this rate'],
+    ['', 'Paying subscribers', k.paying, k.customers ? Math.round(k.paying / k.customers * 100) + '% of ' + k.customers + ' customers' : 'no customers yet'],
+    ['', 'On trial', k.onTrial, k.comped ? k.comped + ' more with free access' : 'free trial or card trial'],
+    ['', 'Revenue, last 30 days', usd(k.revenue30, true), 'after refunds, before fees'],
+    ['', 'New signups, 30 days', k.signups30, k.active7 + ' customers active this week'],
+    ['', 'Cancelled, 30 days', k.churn30, k.paying + k.churn30 ? Math.round(k.churn30 / (k.paying + k.churn30) * 100) + '% of subscribers' : 'no subscribers yet'],
+    ['', 'Failed payments', k.failing, k.failing ? 'past due or unpaid' : 'all cards are going through'],
+    ['', 'Bank connections', k.banks, (k.badItems ? k.badItems + ' need attention' : 'all healthy') + (k.plaidCost != null ? ' · about ' + usd(k.plaidCost) + '/mo Plaid' : '')]
+  ];
+  $("#kpis").innerHTML = tiles.map(t => '<div class="kpi ' + t[0] + '"><span class="eyebrow">' + t[1] + '</span><span class="v">' + t[2] + '</span><span class="s">' + esc(t[3]) + '</span></div>').join("");
+
+  const st = Object.keys(d.statuses).map(key => ({key, n:d.statuses[key]})).sort((a,b) => b.n - a.n);
+  const stMax = st.length ? st[0].n : 1;
+  const mrrNow = d.series.mrr[d.series.mrr.length-1].value, rev = d.series.revenue, revTotal = rev.reduce((a,p) => a + p.value, 0);
+  const signTotal = d.series.signups.reduce((a,p) => a + p.value, 0);
+  $("#charts").innerHTML =
+    '<div class="card"><div class="chart-h"><h2>MRR</h2><span class="note">last 12 months · estimated</span><span class="big">' + usd(mrrNow, true) + '</span></div>'
+      + lineChart("mrr", d.series.mrr, true, "MRR") + '</div>'
+    + '<div class="card"><div class="chart-h"><h2>Revenue by month</h2><span class="note">collected</span><span class="big">' + usd(revTotal) + '</span></div>'
+      + barChart("rev", rev, true, "Revenue", p => monthLabel(p.month), p => monthLabel(p.month) + " " + p.month.slice(0,4)) + '</div>'
+    + '<div class="card"><div class="chart-h"><h2>Signups by week</h2><span class="note">last 12 weeks</span><span class="big">' + signTotal + '</span></div>'
+      + barChart("sign", d.series.signups, false, "Signups", p => MON[parseInt(p.week.slice(5,7),10)-1] + " " + parseInt(p.week.slice(8,10),10), p => "Week of " + MON[parseInt(p.week.slice(5,7),10)-1] + " " + parseInt(p.week.slice(8,10),10)) + '</div>'
+    + '<div class="card"><div class="chart-h"><h2>Subscriptions by status</h2></div>'
+      + (st.length ? '<div class="hbars">' + st.map(s => '<div class="hbar"><span>' + esc(STATUS_NAMES[s.key] || s.key) + '</span><div class="t"><div class="f" style="width:' + Math.max(2, s.n/stMax*100).toFixed(1) + '%"></div></div><span class="v">' + s.n + '</span></div>').join("") + '</div>'
+        : '<div class="note">No subscriptions yet.</div>')
+      + (d.plans.length ? '<table class="plans"><thead><tr><th>Plan</th><th>Price</th><th class="n">Paying</th><th class="n">MRR</th></tr></thead><tbody>'
+        + d.plans.map(p => '<tr><td>' + esc(p.name) + '</td><td>' + usd(p.price, true) + ' / ' + p.interval + '</td><td class="n">' + p.subscribers + '</td><td class="n">' + usd(p.subscribers * (p.interval === "year" ? p.price/12 : p.price), true) + '</td></tr>').join("")
+        + '</tbody></table>' : '')
+    + '</div>';
+  wireCharts();
+
+  $("#system").innerHTML =
+    '<dt>Billing</dt><dd>' + (sys.billing ? 'Lemon Squeezy · ' + d.plans.length + ' plan' + (d.plans.length===1?'':'s') : 'Off') + '</dd>'
+    + '<dt>Last billing event</dt><dd>' + ago(sys.lastWebhook) + '</dd>'
+    + '<dt>Free trial</dt><dd>' + (sys.trialDays ? sys.trialDays + ' days, no card' : 'None') + '</dd>'
+    + '<dt>Bank syncing</dt><dd>' + (sys.plaid ? 'Plaid ' + esc(sys.plaidEnv) : 'Off') + '</dd>'
+    + '<dt>Sign-ups</dt><dd>' + (sys.inviteRequired ? 'Invite code required' : 'Open to anyone') + '</dd>';
+}
+
+/* ── customers ── */
+function accessPill(c){
+  const r = c.access.reason;
+  if(c.disabled) return '<span class="pill bad"><i></i>Turned off</span>';
+  if(c.owner) return '<span class="pill acc"><i></i>Owner</span>';
+  if(r === "active") return '<span class="pill good"><i></i>Paying</span>';
+  if(r === "past_due") return '<span class="pill bad"><i></i>Past due</span>';
+  if(r === "on_trial" || r === "trial") return '<span class="pill info"><i></i>Trial</span>';
+  if(r === "comp") return '<span class="pill acc"><i></i>Free access</span>';
+  if(r === "cancelled") return '<span class="pill warn"><i></i>Cancelled, still active</span>';
+  if(r === "free") return '<span class="pill info"><i></i>Free</span>';
+  return '<span class="pill warn"><i></i>' + esc(r === "trial_ended" ? "Trial ended" : r === "none" ? "No plan" : (STATUS_NAMES[r] || r)) + '</span>';
+}
+function renderCustomers(){
+  $("#ccount").textContent = customers.length + " shown";
+  if(!customers.length){ $("#crows").innerHTML = '<tr><td colspan="8" class="note" style="text-align:center;padding:26px">No customers match.</td></tr>'; return; }
+  $("#crows").innerHTML = customers.map(c => {
+    const s = c.subscription, isOpen = open === c.id;
+    const renew = s ? (s.endsAt ? "Ends " + dateShort(s.endsAt) : s.renewsAt ? dateShort(s.renewsAt) : "—")
+      : c.access.reason === "comp" ? "Free until " + dateShort(c.compUntil) : c.access.reason === "trial" ? "Trial ends " + dateShort(c.trialEnds) : "—";
+    let row = '<tr class="row"><td class="who"><b>' + esc(c.email) + '</b><span>Joined ' + dateShort(c.createdAt) + '</span></td>'
+      + '<td>' + accessPill(c) + (s && s.test ? ' <span class="pill info">test</span>' : '') + '</td>'
+      + '<td>' + esc(s ? (s.plan || "—") : "—") + (s && s.card ? '<div class="note">' + esc(s.card) + '</div>' : '') + '</td>'
+      + '<td>' + esc(renew) + '</td>'
+      + '<td class="n">' + usd(c.lifetime, true) + '</td>'
+      + '<td class="n">' + c.banks + (c.badBanks ? ' <span class="pill warn">' + c.badBanks + ' broken</span>' : '') + '</td>'
+      + '<td>' + ago(c.lastSeenAt) + '</td>'
+      + '<td><button class="btn btn-s" data-open="' + c.id + '" aria-expanded="' + isOpen + '">' + (isOpen ? "Close" : "Manage") + '</button></td></tr>';
+    if(isOpen) row += '<tr class="detail"><td colspan="8">' + detail(c) + '</td></tr>';
+    return row;
+  }).join("");
+}
+function detail(c){
+  if(c.owner) return '<div class="note">Owner accounts always have full access. Remove the email from OWNER_EMAILS to change that.</div>';
+  const pw = secrets[c.id];
+  return '<div class="acts">'
+    + '<div class="act"><span class="eyebrow">Free access</span><div class="row2">'
+      + '<select class="in" id="comp-' + c.id + '" aria-label="How long"><option value="30">1 month</option><option value="90">3 months</option><option value="365">1 year</option><option value="forever">Forever</option></select>'
+      + '<button class="btn btn-s btn-p" data-act="comp" data-id="' + c.id + '">Give free access</button>'
+      + (c.access.reason === "comp" ? '<button class="btn btn-s" data-act="uncomp" data-id="' + c.id + '">Remove it</button>' : '')
+    + '</div><span class="note">' + (c.compUntil ? 'Free until ' + dateShort(c.compUntil) : 'Stacks on top of any subscription.') + '</span></div>'
+    + '<div class="act"><span class="eyebrow">Password</span><div class="row2">'
+      + (pw ? '<span class="secret">' + esc(pw) + '</span><button class="btn btn-s" data-act="copy" data-id="' + c.id + '">Copy</button>'
+        : '<button class="btn btn-s" data-act="reset" data-id="' + c.id + '">Make a temporary password</button>')
+    + '</div><span class="note">' + (pw ? 'Send this to the customer. They choose a new one after signing in. It is not shown again.' : 'Signs them out everywhere.') + '</span></div>'
+    + '<div class="act"><span class="eyebrow">Account</span><div class="row2">'
+      + '<button class="btn btn-s" data-act="' + (c.disabled ? 'enable' : 'disable') + '" data-id="' + c.id + '">' + (c.disabled ? 'Turn back on' : 'Turn off') + '</button>'
+      + (askDelete === c.id
+        ? '<span class="confirm">Delete ' + esc(c.email) + ', their bank connections and server data?<button class="btn btn-s btn-d" data-act="delyes" data-id="' + c.id + '">Delete</button><button class="btn btn-s" data-act="delno">Cancel</button></span>'
+        : '<button class="btn btn-s btn-d" data-act="del" data-id="' + c.id + '">Delete customer</button>')
+    + '</div><span class="note">Cancel or refund the subscription itself in Lemon Squeezy.</span></div>'
+  + '</div>';
+}
+
+/* ── events ── */
+const EVENT_NAMES = {subscription_created:"New subscription", subscription_updated:"Subscription updated", subscription_cancelled:"Cancelled",
+  subscription_resumed:"Resumed", subscription_expired:"Expired", subscription_paused:"Paused", subscription_unpaused:"Unpaused",
+  subscription_payment_success:"Payment", subscription_payment_failed:"Payment failed", subscription_payment_recovered:"Payment recovered",
+  subscription_payment_refunded:"Refund", order_created:"Order", order_refunded:"Order refunded"};
+function renderEvents(list){
+  $("#events").innerHTML = list.length ? list.slice(0, 25).map(e => {
+    const bad = /failed|refund|expired|cancel/.test(e.event_name);
+    return '<div class="ev"><span class="when">' + esc(ago(e.created_at)) + '</span>'
+      + '<span class="what"><b>' + esc(EVENT_NAMES[e.event_name] || e.event_name) + '</b> <span>' + esc(e.email || "") + (e.summary ? " · " + esc(e.summary) : "") + '</span></span>'
+      + (e.test_mode ? '<span class="pill info">test</span>' : bad ? '<span class="pill warn"><i></i>check</span>' : '<span></span>') + '</div>';
+  }).join("") : '<div class="note">Nothing yet. Purchases, renewals and cancellations show up here.</div>';
+}
+
+/* ── loading ── */
+async function loadAll(){
+  const t = testOn() ? "1" : "0";
+  try{
+    const [sum, ev] = await Promise.all([api("/api/owner/summary?test=" + t), api("/api/owner/events?test=" + t)]);
+    renderSummary(sum); renderEvents(ev);
+    await loadCustomers();
+  }catch(e){ if(e.message !== "Signed out") toast(e.message); }
+}
+async function loadCustomers(){
+  const params = new URLSearchParams({q:$("#csearch").value, status:$("#cstatus").value, test:testOn() ? "1" : "0"});
+  customers = await api("/api/owner/customers?" + params);
+  renderCustomers();
+}
+async function start(){
+  $("#gate").hidden = true; $("#app").hidden = false;
+  await loadAll();
+}
+
+/* ── events wiring ── */
+$("#login").addEventListener("submit", async e => {
+  e.preventDefault();
+  $("#lg-err").textContent = "";
+  try{
+    const r = await fetch("/api/auth/login", {method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({email:$("#lg-email").value, password:$("#lg-pass").value})});
+    const j = await r.json().catch(() => ({}));
+    if(!r.ok) throw new Error(j.error || "Could not sign in.");
+    if(!j.me || !j.me.owner){
+      fetch("/api/auth/logout", {method:"POST", headers:{Authorization:"Bearer " + j.token}}).catch(()=>{});
+      throw new Error("That account is not an owner. Add its email to OWNER_EMAILS on the server.");
+    }
+    token = j.token; try{ localStorage.setItem(TOKEN_KEY, token); }catch(e){}
+    $("#lg-pass").value = "";
+    start();
+  }catch(err){ $("#lg-err").textContent = err.message; }
+});
+$("#logout").addEventListener("click", () => signOut(false));
+$("#refresh").addEventListener("click", () => loadAll().then(() => toast("Up to date")));
+$("#theme").addEventListener("click", () => {
+  const r = document.documentElement, dark = r.dataset.theme === "dark" || (!r.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+  r.dataset.theme = dark ? "light" : "dark";
+});
+$("#test").addEventListener("change", () => { try{ localStorage.setItem(TEST_KEY, testOn() ? "1" : "0"); }catch(e){} loadAll(); });
+let searchT = null;
+$("#csearch").addEventListener("input", () => { clearTimeout(searchT); searchT = setTimeout(() => loadCustomers().catch(e => toast(e.message)), 220); });
+$("#cstatus").addEventListener("change", () => loadCustomers().catch(e => toast(e.message)));
+
+document.addEventListener("click", async e => {
+  const o = e.target.closest("[data-open]");
+  if(o){ const id = +o.dataset.open; open = open === id ? null : id; askDelete = null; renderCustomers(); return; }
+  const b = e.target.closest("[data-act]");
+  if(!b) return;
+  const id = +b.dataset.id, act = b.dataset.act;
+  const run = async (fn, msg) => { b.disabled = true; try{ await fn(); if(msg) toast(msg); await loadAll(); }catch(err){ if(err.message !== "Signed out") toast(err.message); } finally{ b.disabled = false; } };
+  if(act === "comp"){ const days = $("#comp-" + id).value; run(() => api("/api/owner/customers/" + id + "/comp", {method:"POST", body:{days}}), "Free access given"); }
+  if(act === "uncomp") run(() => api("/api/owner/customers/" + id + "/comp", {method:"POST", body:{days:"none"}}), "Free access removed");
+  if(act === "reset") run(async () => { const r = await api("/api/owner/customers/" + id + "/reset-password", {method:"POST"}); secrets[id] = r.tempPassword; }, "Temporary password made");
+  if(act === "copy"){
+    const pw = secrets[id];
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(pw).then(() => toast("Copied"), () => toast("Select the password and copy it"));
+    else toast("Select the password and copy it");
+  }
+  if(act === "disable") run(() => api("/api/owner/customers/" + id + "/disable", {method:"POST", body:{disabled:true}}), "Account turned off");
+  if(act === "enable") run(() => api("/api/owner/customers/" + id + "/disable", {method:"POST", body:{disabled:false}}), "Account turned back on");
+  if(act === "del"){ askDelete = id; renderCustomers(); }
+  if(act === "delno"){ askDelete = null; renderCustomers(); }
+  if(act === "delyes") run(async () => { await api("/api/owner/customers/" + id, {method:"DELETE"}); askDelete = null; open = null; }, "Customer deleted");
+});
+
+try{ $("#test").checked = localStorage.getItem(TEST_KEY) === "1"; }catch(e){}
+if(token){ start(); } else { $("#gate").hidden = false; }
+})();
+</script>
+</body>
+</html>

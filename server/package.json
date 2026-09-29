@@ -1,0 +1,23 @@
+{
+  "name": "safe-to-spend-server",
+  "version": "1.0.0",
+  "description": "Optional bank-sync server for Safe to Spend (Plaid)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.js",
+    "dev": "node --watch --env-file-if-exists=.env src/server.js",
+    "keygen": "node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"",
+    "demo": "node scripts/seed-demo.js && npm run demo:serve",
+    "demo:serve": "DB_PATH=data/demo.db OWNER_EMAILS=owner@demo.test LEMONSQUEEZY_WEBHOOK_SECRET=demo LEMONSQUEEZY_PLANS='[{\"id\":\"monthly\",\"name\":\"Monthly\",\"price\":9.99,\"interval\":\"month\",\"variantId\":\"111\",\"checkoutUrl\":\"https://demo.lemonsqueezy.com/buy/monthly\"},{\"id\":\"yearly\",\"name\":\"Yearly\",\"price\":79.99,\"interval\":\"year\",\"variantId\":\"222\",\"checkoutUrl\":\"https://demo.lemonsqueezy.com/buy/yearly\"}]' PLAID_MONTHLY_COST_PER_ITEM=0.30 node src/server.js"
+  },
+  "type": "module",
+  "dependencies": {
+    "express": "^5.2.1",
+    "plaid": "^47.0.0"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "license": "UNLICENSED"
+}
