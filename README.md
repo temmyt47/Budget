@@ -141,11 +141,21 @@ Optional settings:
 | DELETE | `/api/me` | Deletes the account, every bank connection and all server data |
 | POST | `/api/plaid/webhook` | Plaid webhooks |
 
+## Light and dark
+
+The app follows your device by default. The button at the bottom of the sidebar — on a phone, the sun/moon button in the header — cycles **system → light → dark → system**, and the choice is remembered on that device.
+
+The choice is read before the first pixel is drawn, so opening in dark mode never flashes white. The surrounding chrome follows too: the address bar on Android Chrome and iOS Safari, and the status bar text in the phone app (via `@capacitor/status-bar`).
+
+Stored under the `safe-to-spend/theme` key in local storage. Clearing site data puts it back to "system".
+
 ## Phone app
 
 See "Try it on your phone" and the store steps below. Nothing changes for bank syncing. The app asks for your server address under **Accounts → Bank connections**.
 
 ### Try it on your phone (free)
+
+Run `npm run sync` first, and again after every change to `www/` — the phone projects read their own copy, not `www/` directly.
 
 - **iPhone:** install Xcode, then run `npx cap open ios`. Pick your team under Signing & Capabilities, plug in the phone, and press Run.
 - **Android:** install Android Studio, then run `npx cap open android`. Turn on USB debugging on the phone, plug it in, and press Run.
@@ -178,4 +188,5 @@ Needs a Play Console account ($25 once).
 
 - Budget, goals and category rules live on each device. The server syncs bank data only, not your budget, between devices.
 - Balances come from Plaid's `/accounts/get`, which Plaid refreshes about once a day. Real-time balance checks (`/accounts/balance/get`) cost extra and aren't used.
+- On Android, the moment before the app's first paint uses `android.backgroundColor` from `capacitor.config.json`, a single fixed colour (dark). A cold start in light mode flashes dark. Neither the web manifest nor the Capacitor config can hold two colours; fixing it properly needs a themed `values-night` resource in the Android project.
 - The Claude artifact version can't reach outside servers, so it has no bank syncing. File import, CSV and backups work there.
